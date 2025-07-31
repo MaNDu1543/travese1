@@ -1,0 +1,42 @@
+# .dockerignore - Ignore unnecessary files in Docker build
+
+# Dependencies
+node_modules
+npm_modules
+bower_components
+
+# Build outputs
+dist
+build
+out
+.next
+.nuxt
+public/build
+
+# Testing
+coverage
+nyc_output
+
+# Misc
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment files (unless needed)
+.env.local
+.env
+!.env.production  # Only include if you need it
+
+# Version control
+.git
+.gitignore
+
+# IDE and editors
+.cache
+.vscode/
+.idea/
+*.swp
+*~
