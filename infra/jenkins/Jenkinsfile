@@ -36,8 +36,8 @@ pipeline {
                                 def IMAGE_TAG = env.BUILD_NUMBER ?: 'latest'
                                 def IMAGE_REPO = "${REPO_URI}/${IMAGE_NAME}"
 
-                                echo "Building ${IMAGE_NAME}:${IMAGE_TAG}"
-                                echo "Context: services/${SERVICE}"
+                                echo "🏗️ Building ${IMAGE_NAME}:${IMAGE_TAG}"
+                                echo "ImageContext: services/${SERVICE}"
 
                                 // Ensure service directory exists
                                 if (!fileExists("services/${SERVICE}")) {
@@ -47,19 +47,19 @@ pipeline {
                                 dir("services/${SERVICE}") {
                                     // Confirm Dockerfile exists
                                     sh '''
-                                        echo "Checking for Dockerfile..."
+                                        echo "🔍 Checking Dockerfile..."
+                                        ls -la Dockerfile
                                         if [ ! -f Dockerfile ]; then
-                                            echo "ERROR: Dockerfile missing in services/${SERVICE}!"
+                                            echo "❌ ERROR: Dockerfile missing in services/${SERVICE}!"
                                             exit 1
                                         fi
-                                        ls -la Dockerfile
                                     '''
 
                                     try {
-                                        echo "Building Docker image: ${IMAGE_NAME}"
+                                        echo "🐳 Building Docker image: ${IMAGE_NAME}"
                                         dockerImage = docker.build("${IMAGE_NAME}", ".")
                                     } catch (err) {
-                                        echo "Docker build failed for ${IMAGE_NAME}: ${err}"
+                                        echo "❌ Docker build failed for ${IMAGE_NAME}: ${err}"
                                         throw err
                                     }
                                 }
@@ -67,21 +67,21 @@ pipeline {
                                 // Push to ECR using Jenkins credentials
                                 try {
                                     docker.withRegistry("https://${REPO_URI}", ECR_CREDENTIALS_ID) {
-                                        echo "Pushing ${IMAGE_REPO}:${IMAGE_TAG}"
+                                        echo "⏫ Pushing ${IMAGE_REPO}:${IMAGE_TAG}"
                                         dockerImage.push(IMAGE_TAG)
 
-                                        echo "Pushing ${IMAGE_REPO}:latest"
+                                        echo "⏫ Pushing ${IMAGE_REPO}:latest"
                                         dockerImage.push('latest')
                                     }
-                                    echo "Successfully pushed ${IMAGE_REPO}:${IMAGE_TAG}"
+                                    echo "✅ Successfully pushed ${IMAGE_REPO}:${IMAGE_TAG}"
                                 } catch (err) {
-                                    echo "Failed to push image to ECR: ${err}"
+                                    echo "❌ Failed to push image to ECR: ${err}"
                                     throw err
                                 }
 
                                 // Set image URI for Terraform
                                 env["IMAGE_URI_${SERVICE.toUpperCase()}"] = "${IMAGE_REPO}:${IMAGE_TAG}"
-                                echo "Image URI set: ${env["IMAGE_URI_${SERVICE.toUpperCase()}"]}"
+                                echo "✅ Image URI set: ${env["IMAGE_URI_${SERVICE.toUpperCase()}"]}"
                             }
                         }
                     }
@@ -96,14 +96,14 @@ pipeline {
                     def missing = services.findAll { !env["IMAGE_URI_${it.toUpperCase()}"] }
                     
                     if (!missing.isEmpty()) {
-                        error "Missing image URIs for services: ${missing.join(', ')}"
+                        error "❌ Missing image URIs for services: ${missing.join(', ')}"
                     }
 
                     dir('infra/terraform') {
-                        echo "Initializing Terraform..."
+                        echo "🔧 Initializing Terraform..."
                         sh 'terraform init'
 
-                        echo "Applying Terraform with image URIs..."
+                        echo "🚀 Applying Terraform with image URIs..."
                         sh """
                             terraform apply -auto-approve \\
                               -var="booking_image_uri=${env.IMAGE_URI_BOOKING}" \\
@@ -128,26 +128,27 @@ pipeline {
     }
     post {
         success {
-            echo 'DEPLOYMENT SUCCEEDED!'
+            echo '✅✅ DEPLOYMENT SUCCEEDED!'
             // Optional: Send notification
-            // slackSend channel: '#deployments', message: "Build ${env.BUILD_NUMBER} succeeded!"
+            // slackSend channel: '#deployments', message: "✅ Build ${env.BUILD_NUMBER} succeeded!"
             // emailext body: 'Deployment succeeded!', subject: 'Success', to: 'team@example.com'
         }
         failure {
-            echo 'DEPLOYMENT FAILED!'
+            echo '❌❌ DEPLOYMENT FAILED!'
             echo 'Check logs for details. Common issues:'
             echo '  - Docker plugin missing'
             echo '  - Jenkins user not in docker group'
             echo '  - Missing Dockerfile'
             echo '  - Terraform configuration error'
             // Optional: Send alert
-            // slackSend channel: '#alerts', message: "Build ${env.BUILD_NUMBER} failed!"
+            // slackSend channel: '#alerts', message: "❌ Build ${env.BUILD_NUMBER} failed!"
             // emailext body: 'Deployment failed!', subject: 'Failure', to: 'team@example.com'
         }
         always {
+            // Safe cleanup: runs on same agent
             script {
                 node {
-                    echo 'Cleaning up Docker and workspace...'
+                    echo '🧹 Cleaning up Docker and workspace...'
                     sh 'docker system prune -f || echo "Docker prune skipped or failed"'
                     cleanWs()
                 }
