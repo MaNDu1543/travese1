@@ -69,10 +69,10 @@ pipeline {
                     dir('infra/terraform') {
                         sh 'terraform init'
                         sh """
-                            terraform apply -auto-approve \
-                              -var="booking_image_uri=${env.IMAGE_URI_BOOKING}" \
-                              -var="payment_image_uri=${env.IMAGE_URI_PAYMENT}" \
-                              -var="user_image_uri=${env.IMAGE_URI_USER}" \
+                            terraform apply -auto-approve \\
+                              -var="booking_image_uri=${env.IMAGE_URI_BOOKING}" \\
+                              -var="payment_image_uri=${env.IMAGE_URI_PAYMENT}" \\
+                              -var="user_image_uri=${env.IMAGE_URI_USER}" \\
                               -var="frontend_image_uri=${env.IMAGE_URI_FRONTEND}"
                         """
                     }
@@ -91,17 +91,18 @@ pipeline {
         }
     }
     post {
-    success {
-        echo '✅ Deployment succeeded!'
-    }
-    failure {
-        echo '❌ Deployment failed!'
-    }
-    always {
-        node {
-            echo '🧹 Running cleanup on assigned node'
-            sh 'docker system prune -f || true'
-            cleanWs()
+        success {
+            echo '✅ Deployment succeeded!'
+        }
+        failure {
+            echo '❌ Deployment failed!'
+        }
+        always {
+            node {
+                echo '🧹 Running cleanup on assigned node'
+                sh 'docker system prune -f || true'
+                cleanWs()
+            }
         }
     }
-}
+}  
