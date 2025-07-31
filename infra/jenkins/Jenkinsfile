@@ -6,8 +6,8 @@ pipeline {
         ECR_REPO_BASE      = 'travel-ease'
         REPO_URI           = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
         
-        // Use a single Jenkins credential of type "Username with password"
-        ECR_CREDENTIALS_ID = 'aws-ecr-credentials'  // Must match your Jenkins credential ID
+        // Must match your Jenkins credential ID
+        ECR_CREDENTIALS_ID = 'aws-ecr-credentials'
     }
     stages {
         stage('Checkout') {
@@ -34,7 +34,7 @@ pipeline {
                                 echo "🏗️ Building ${IMAGE_NAME}:${IMAGE_TAG} in services/${SERVICE}"
 
                                 dir("services/${SERVICE}") {
-                                    // Ensure Dockerfile exists
+                                    // Confirm Dockerfile exists
                                     sh 'ls -la Dockerfile'
                                     dockerImage = docker.build("${IMAGE_NAME}", ".")
                                 }
@@ -43,7 +43,6 @@ pipeline {
                                 docker.withRegistry("https://${REPO_URI}", ECR_CREDENTIALS_ID) {
                                     echo "⏫ Pushing ${IMAGE_NAME}:${IMAGE_TAG}"
                                     dockerImage.push(IMAGE_TAG)
-
                                     echo "⏫ Pushing ${IMAGE_NAME}:latest"
                                     dockerImage.push('latest')
                                 }
@@ -60,7 +59,6 @@ pipeline {
         stage('Terraform Init & Apply') {
             steps {
                 script {
-                    // Validate required image URIs are set
                     def services = ['booking', 'payment', 'user', 'frontend']
                     def missing = services.findAll { !env["IMAGE_URI_${it.toUpperCase()}"] }
                     
@@ -92,18 +90,20 @@ pipeline {
             }
         }
     }
-  post {
-    success {
-        echo '✅ Deployment succeeded!'
-    }
-    failure {
-        echo '❌ Deployment failed!'
-    }
-    always {
-        node('master') {  // Ensure this matches your Jenkins agent label
-            echo '🧹 Cleaning up workspace and Docker...'
-            sh 'docker system prune -f || true'
-            cleanWs()
+    post {
+        success {
+            echo '✅ Deployment succeeded!'
+        }
+        failure {
+            echo '❌ Deployment failed!'
+        }
+        always {
+            // ✅ Safe: runs on whatever node was assigned (built-in or agent)
+            node {
+                echo '🧹 Cleaning up workspace and Docker...'
+                sh 'docker system prune -f || true'
+                cleanWs()
+            }
         }
     }
 }
