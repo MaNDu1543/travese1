@@ -92,20 +92,18 @@ pipeline {
             }
         }
     }
-    post {
-        success {
-            echo '✅ Deployment succeeded!'
-        }
-        failure {
-            echo '❌ Deployment failed!'
-        }
-        always {
-            // ✅ Fixed: cleanWs() and sh require node context
-            node {
-                echo '🧹 Cleaning up workspace and Docker...'
-                sh 'docker system prune -f || true'
-                cleanWs()
-            }
+  post {
+    success {
+        echo '✅ Deployment succeeded!'
+    }
+    failure {
+        echo '❌ Deployment failed!'
+    }
+    always {
+        node('master') {  // Ensure this matches your Jenkins agent label
+            echo '🧹 Cleaning up workspace and Docker...'
+            sh 'docker system prune -f || true'
+            cleanWs()
         }
     }
 }
