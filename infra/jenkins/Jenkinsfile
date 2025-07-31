@@ -91,19 +91,17 @@ pipeline {
         }
     }
     post {
-        success {
-            echo '✅ Deployment succeeded!'
-        }
-        failure {
-            echo '❌ Deployment failed!'
-        }
-        always {
-            // ✅ Safe: runs on whatever node was assigned (built-in or agent)
-            node {
-                echo '🧹 Cleaning up workspace and Docker...'
-                sh 'docker system prune -f || true'
-                cleanWs()
-            }
+    success {
+        echo '✅ Deployment succeeded!'
+    }
+    failure {
+        echo '❌ Deployment failed!'
+    }
+    always {
+        node {
+            echo '🧹 Running cleanup on assigned node'
+            sh 'docker system prune -f || true'
+            cleanWs()
         }
     }
 }
