@@ -3,7 +3,7 @@ pipeline {
     environment {
         AWS_REGION = 'ap-south-1'
         ECR_REGISTRY = '726661503021.dkr.ecr.ap-south-1.amazonaws.com'
-        SERVICE_NAME = 'frontend'  // Or use params/matrix
+        SERVICE_NAME = 'frontend'
         IMAGE_TAG = "${ECR_REGISTRY}/${SERVICE_NAME}:latest"
     }
     stages {
@@ -11,9 +11,10 @@ pipeline {
             steps {
                 script {
                     withCredentials([aws(credentialsId: 'aws-ecr-credentials', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
-                        sh """
+                        sh '''
                             # Authenticate with ECR
-                            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
 
                             # Build Docker image
                             docker build -t ${SERVICE_NAME} .
@@ -23,16 +24,9 @@ pipeline {
 
                             # Push to ECR
                             docker push ${IMAGE_TAG}
-                        """
+                        '''
                     }
                 }
-            }
-        }
-
-        stage('Terraform Apply') {
-            steps {
-                echo "Proceeding to deploy via Terraform..."
-                // Your Terraform steps here
             }
         }
     }
@@ -44,7 +38,7 @@ pipeline {
             echo '✅ Deployment successful!'
         }
         always {
-            cleanWs()  // Clean workspace
+            cleanWs()  # Clean workspace
         }
     }
 }
