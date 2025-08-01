@@ -16,41 +16,29 @@ pipeline {
                         secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                     )]) {
                         sh '''
-                            #!/bin/bash
-                            set -e  # Exit on any failure
+                            set -e
+                            export AWS_DEFAULT_REGION=$AWS_REGION
 
-                            export AWS_DEFAULT_REGION=${AWS_REGION}
-
-                            # Authenticate with ECR
-                            echo "Logging into ECR..."
-                            aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
+                            # Login to ECR
+                            aws ecr get-login-password --region $AWS_REGION | \
                                 docker login --username AWS --password-stdin $ECR_REGISTRY
+
+                            # Navigate to services/frontend
+                            cd services/frontend
 
                             # Build Docker image
                             echo "Building Docker image..."
                             docker build -t $SERVICE_NAME .
 
-                            # Tag the image
-                            echo "Tagging image as $IMAGE_TAG"
+                            # Tag and push
+                            echo "Tagging and pushing to ECR..."
                             docker tag $SERVICE_NAME:latest $IMAGE_TAG
-
-                            # Push to ECR
-                            echo "Pushing image to ECR..."
                             docker push $IMAGE_TAG
 
-                            echo "✅ Image successfully pushed to ECR!"
+                            echo "✅ Image pushed to ECR!"
                         '''
                     }
                 }
-            }
-        }
-
-        stage('Terraform Apply') {
-            steps {
-                echo 'Proceeding to deploy via Terraform...'
-                // Example Terraform steps (uncomment when ready):
-                // sh 'terraform init'
-                // sh 'terraform apply -auto-approve'
             }
         }
     }
@@ -62,7 +50,7 @@ pipeline {
             echo '✅ Deployment successful!'
         }
         always {
-            cleanWs()  // ✅ Correct: Use // for comments in Groovy
+            cleanWs()
         }
     }
 }
