@@ -10,23 +10,47 @@ pipeline {
         stage('Build and Push to ECR') {
             steps {
                 script {
-                    withCredentials([aws(credentialsId: 'aws-ecr-credentials', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    withCredentials([aws(
+                        credentialsId: 'aws-ecr-credentials',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    )]) {
                         sh '''
+                            #!/bin/bash
+                            set -e  # Exit on any failure
+
+                            export AWS_DEFAULT_REGION=${AWS_REGION}
+
                             # Authenticate with ECR
-                            aws ecr get-login-password --region ${AWS_REGION} | \
-                            docker login --username AWS --password-stdin ${ECR_REGISTRY}
+                            echo "Logging into ECR..."
+                            aws ecr get-login-password --region $AWS_DEFAULT_REGION | \
+                                docker login --username AWS --password-stdin $ECR_REGISTRY
 
                             # Build Docker image
-                            docker build -t ${SERVICE_NAME} .
+                            echo "Building Docker image..."
+                            docker build -t $SERVICE_NAME .
 
-                            # Tag image
-                            docker tag ${SERVICE_NAME}:latest ${IMAGE_TAG}
+                            # Tag the image
+                            echo "Tagging image as $IMAGE_TAG"
+                            docker tag $SERVICE_NAME:latest $IMAGE_TAG
 
                             # Push to ECR
-                            docker push ${IMAGE_TAG}
+                            echo "Pushing image to ECR..."
+                            docker push $IMAGE_TAG
+
+                            echo "✅ Image successfully pushed to ECR!"
                         '''
                     }
                 }
+            }
+        }
+
+        stage('Terraform Apply') {
+            steps {
+                echo 'Proceeding to deploy via Terraform...'
+                // Example Terraform steps (uncomment when ready):
+                // sh 'terraform init'
+                // sh 'terraform apply -auto-approve'
             }
         }
     }
@@ -38,7 +62,7 @@ pipeline {
             echo '✅ Deployment successful!'
         }
         always {
-            cleanWs()  # Clean workspace
+            cleanWs()  // ✅ Correct: Use // for comments in Groovy
         }
     }
 }
