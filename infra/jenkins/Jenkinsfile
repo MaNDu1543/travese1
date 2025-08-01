@@ -1,158 +1,50 @@
 pipeline {
     agent any
     environment {
-        AWS_REGION         = 'ap-south-1'
-        AWS_ACCOUNT_ID     = '726661503021'
-        ECR_REPO_BASE      = 'travel-ease'
-        REPO_URI           = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        ECR_CREDENTIALS_ID = 'aws-ecr-credentials'  // Must match Jenkins credential ID
-
-        // Optional: Enable debug mode
-        DEBUG              = 'true'
+        AWS_REGION = 'ap-south-1'
+        ECR_REGISTRY = '726661503021.dkr.ecr.ap-south-1.amazonaws.com'
+        SERVICE_NAME = 'frontend'  // Or use params/matrix
+        IMAGE_TAG = "${ECR_REGISTRY}/${SERVICE_NAME}:latest"
     }
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-                echo "Repository checked out: ${env.BRANCH_NAME}@${env.GIT_COMMIT.take(7)}"
-                sh 'echo "Workspace: $(pwd)"'
-                sh 'ls -la'
-            }
-        }
-
-        stage('Build & Push Images') {
-            matrix {
-                axes {
-                    axis {
-                        name 'SERVICE'
-                        values 'booking', 'payment', 'user', 'frontend'
-                    }
-                }
-                stages {
-                    stage('Build') {
-                        steps {
-                            script {
-                                def IMAGE_NAME = "${ECR_REPO_BASE}-${SERVICE}"
-                                def IMAGE_TAG = env.BUILD_NUMBER ?: 'latest'
-                                def IMAGE_REPO = "${REPO_URI}/${IMAGE_NAME}"
-
-                                echo "🏗️ Building ${IMAGE_NAME}:${IMAGE_TAG}"
-                                echo "ImageContext: services/${SERVICE}"
-
-                                // Ensure service directory exists
-                                if (!fileExists("services/${SERVICE}")) {
-                                    error "Service directory not found: services/${SERVICE}"
-                                }
-
-                                dir("services/${SERVICE}") {
-                                    // Confirm Dockerfile exists
-                                    sh '''
-                                        echo "🔍 Checking Dockerfile..."
-                                        ls -la Dockerfile
-                                        if [ ! -f Dockerfile ]; then
-                                            echo "❌ ERROR: Dockerfile missing in services/${SERVICE}!"
-                                            exit 1
-                                        fi
-                                    '''
-
-                                    try {
-                                        echo "🐳 Building Docker image: ${IMAGE_NAME}"
-                                        dockerImage = docker.build("${IMAGE_NAME}", ".")
-                                    } catch (err) {
-                                        echo "❌ Docker build failed for ${IMAGE_NAME}: ${err}"
-                                        throw err
-                                    }
-                                }
-
-                                // Push to ECR using Jenkins credentials
-                                try {
-                                    docker.withRegistry("https://${REPO_URI}", ECR_CREDENTIALS_ID) {
-                                        echo "⏫ Pushing ${IMAGE_REPO}:${IMAGE_TAG}"
-                                        dockerImage.push(IMAGE_TAG)
-
-                                        echo "⏫ Pushing ${IMAGE_REPO}:latest"
-                                        dockerImage.push('latest')
-                                    }
-                                    echo "✅ Successfully pushed ${IMAGE_REPO}:${IMAGE_TAG}"
-                                } catch (err) {
-                                    echo "❌ Failed to push image to ECR: ${err}"
-                                    throw err
-                                }
-
-                                // Set image URI for Terraform
-                                env["IMAGE_URI_${SERVICE.toUpperCase()}"] = "${IMAGE_REPO}:${IMAGE_TAG}"
-                                echo "✅ Image URI set: ${env["IMAGE_URI_${SERVICE.toUpperCase()}"]}"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Terraform Init & Apply') {
+        stage('Build and Push to ECR') {
             steps {
                 script {
-                    def services = ['booking', 'payment', 'user', 'frontend']
-                    def missing = services.findAll { !env["IMAGE_URI_${it.toUpperCase()}"] }
-                    
-                    if (!missing.isEmpty()) {
-                        error "❌ Missing image URIs for services: ${missing.join(', ')}"
-                    }
-
-                    dir('infra/terraform') {
-                        echo "🔧 Initializing Terraform..."
-                        sh 'terraform init'
-
-                        echo "🚀 Applying Terraform with image URIs..."
+                    withCredentials([aws(credentialsId: 'aws-ecr-credentials', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                         sh """
-                            terraform apply -auto-approve \\
-                              -var="booking_image_uri=${env.IMAGE_URI_BOOKING}" \\
-                              -var="payment_image_uri=${env.IMAGE_URI_PAYMENT}" \\
-                              -var="user_image_uri=${env.IMAGE_URI_USER}" \\
-                              -var="frontend_image_uri=${env.IMAGE_URI_FRONTEND}"
+                            # Authenticate with ECR
+                            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}
+
+                            # Build Docker image
+                            docker build -t ${SERVICE_NAME} .
+
+                            # Tag image
+                            docker tag ${SERVICE_NAME}:latest ${IMAGE_TAG}
+
+                            # Push to ECR
+                            docker push ${IMAGE_TAG}
                         """
                     }
                 }
             }
         }
 
-        stage('ECS Redeploy (Optional)') {
+        stage('Terraform Apply') {
             steps {
-                dir('infra/terraform') {
-                    sh 'terraform init'
-                    sh 'terraform plan'
-                    sh 'terraform apply -auto-approve'
-                }
+                echo "Proceeding to deploy via Terraform..."
+                // Your Terraform steps here
             }
         }
     }
     post {
-        success {
-            echo '✅✅ DEPLOYMENT SUCCEEDED!'
-            // Optional: Send notification
-            // slackSend channel: '#deployments', message: "✅ Build ${env.BUILD_NUMBER} succeeded!"
-            // emailext body: 'Deployment succeeded!', subject: 'Success', to: 'team@example.com'
-        }
         failure {
-            echo '❌❌ DEPLOYMENT FAILED!'
-            echo 'Check logs for details. Common issues:'
-            echo '  - Docker plugin missing'
-            echo '  - Jenkins user not in docker group'
-            echo '  - Missing Dockerfile'
-            echo '  - Terraform configuration error'
-            // Optional: Send alert
-            // slackSend channel: '#alerts', message: "❌ Build ${env.BUILD_NUMBER} failed!"
-            // emailext body: 'Deployment failed!', subject: 'Failure', to: 'team@example.com'
+            echo '❌ DEPLOYMENT FAILED!'
+        }
+        success {
+            echo '✅ Deployment successful!'
         }
         always {
-            // Safe cleanup: runs on same agent
-            script {
-                node {
-                    echo '🧹 Cleaning up Docker and workspace...'
-                    sh 'docker system prune -f || echo "Docker prune skipped or failed"'
-                    cleanWs()
-                }
-            }
+            cleanWs()  // Clean workspace
         }
     }
 }
