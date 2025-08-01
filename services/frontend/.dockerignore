@@ -1,42 +1,33 @@
-# .dockerignore - Ignore unnecessary files in Docker build
+# Use a lightweight base image with Node.js
+FROM node:18-alpine AS base
+WORKDIR /app
 
-# Dependencies
-node_modules
-npm_modules
-bower_components
+# Install dependencies first for better caching
+COPY package*.json ./
 
-# Build outputs
-dist
-build
-out
-.next
-.nuxt
-public/build
+# Install production dependencies only
+RUN npm ci --only=production && \
+    npm cache clean --force
 
-# Testing
-coverage
-nyc_output
+# Copy all app files (but thanks to .dockerignore, node_modules etc. are excluded)
+COPY . .
 
-# Misc
-.DS_Store
-Thumbs.db
+# Build the app (if needed)
+RUN npm run build
 
-# Logs
-*.log
-logs/
+# --- Production Stage ---
+FROM node:18-alpine AS runner
+WORKDIR /app
 
-# Environment files (unless needed)
-.env.local
-.env
-!.env.production  # Only include if you need it
+# Copy only what's needed to run the app
+COPY --from=base /app/node_modules ./node_modules
+COPY --from=base /app/package*.json ./
+COPY --from=base /app/dist ./dist
+COPY --from=base /app/public ./public
 
-# Version control
-.git
-.gitignore
+# Optional: set environment
+ENV NODE_ENV=production
 
-# IDE and editors
-.cache
-.vscode/
-.idea/
-*.swp
-*~
+# Run the app
+EXPOSE 3000
+CMD ["node", "dist/server.js"]  # Adjust entry point as needed
